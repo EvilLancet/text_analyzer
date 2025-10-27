@@ -1,0 +1,3 @@
+cd /c/Users/matvey/Desktop/text_analyzer-main/text_lex 
+
+g++ -std=c++17 -O2 -Wall -Wextra main.cpp logic.cpp -o text_lex.exe -lcomdlg32
