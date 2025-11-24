@@ -10,3 +10,51 @@
 1762706252 source:f:\marinelogbook\text_analyzer\text_lex\header.hpp
 	<string>
 
+1763922569 source:f:\marinelogbook\text_analyzer\text_lex_new\main.cpp
+	"header.hpp"
+	<iostream>
+	<string>
+	<windows.h>
+	<cctype>
+
+1763922542 f:\marinelogbook\text_analyzer\text_lex_new\header.hpp
+	<string>
+
+1764004732 source:f:\marinelogbook\text_analyzer\text_lex_new\logic.cpp
+	"header.hpp"
+	<iostream>
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<ctype.h>
+	<fstream>
+	<string>
+	<vector>
+	<map>
+	<sstream>
+	<algorithm>
+
+1764004732 source:f:\marinelogbook\text_analyzer\text_lex\logic.cpp
+	"header.hpp"
+	<iostream>
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<ctype.h>
+	<fstream>
+	<string>
+	<vector>
+	<map>
+	<sstream>
+	<algorithm>
+
+1763922542 f:\marinelogbook\text_analyzer\text_lex\header.hpp
+	<string>
+
+1763922569 source:f:\marinelogbook\text_analyzer\text_lex\main.cpp
+	"header.hpp"
+	<iostream>
+	<string>
+	<windows.h>
+	<cctype>
+
