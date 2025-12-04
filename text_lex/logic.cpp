@@ -18,10 +18,10 @@ using namespace std;
 static const char *src;
 static int pos = 0;
 
-// динамический список суффиксов (окончаний), считываемый из файла
+// динамический список суффиксов
 static vector<string> g_suffixes;
 
-// простое обрезание пробелов в начале и конце строки
+// простое обрезание пробелов
 static string trim(const string &s) {
     size_t start = 0;
     while (start < s.size() &&
@@ -36,32 +36,19 @@ static string trim(const string &s) {
     return s.substr(start, end - start);
 }
 
-// разбор одной строки с суффиксами
-// поддерживает форматы:
-//   "ась", "тся", "енн"
-//   а также просто: ась
+// разбор строки с суффиксами
 static void parseSuffixLine(const string &line) {
     string t = trim(line);
+    if (t.empty()) return;
+    if (t[0] == '#') return;
+    if (t.size() >= 2 && t[0] == '/' && t[1] == '/') return;
 
-    // пустые строки пропускаем
-    if (t.empty())
-        return;
+    size_t curPos = 0;
+    while (curPos < t.size()) {
+        size_t commaPos = t.find(',', curPos);
+        size_t len = (commaPos == string::npos) ? (t.size() - curPos) : (commaPos - curPos);
+        string part = trim(t.substr(curPos, len));
 
-    // комментарии: строки, начинающиеся с # или //
-    if (t[0] == '#')
-        return;
-    if (t.size() >= 2 && t[0] == '/' && t[1] == '/')
-        return;
-
-    // делим строку по запятой, чтобы поддерживать формат
-    // "ась", "тся", "енн"
-    size_t pos = 0;
-    while (pos < t.size()) {
-        size_t commaPos = t.find(',', pos);
-        size_t len = (commaPos == string::npos) ? (t.size() - pos) : (commaPos - pos);
-        string part = trim(t.substr(pos, len));
-
-        // убираем кавычки вокруг суффикса, если есть
         if (!part.empty()) {
             if ((part.front() == '\"' && part.back() == '\"') ||
                 (part.front() == '\'' && part.back() == '\'')) {
@@ -70,45 +57,27 @@ static void parseSuffixLine(const string &line) {
             }
         }
 
-        // пропускаем пустой результат
         if (!part.empty()) {
-            // суффиксы с дефисом (типа "-то") нам не нужны
-            if (part.find('-') == string::npos) {
-                g_suffixes.push_back(part);
-            }
+            // Разрешаем суффиксы даже с дефисом, если вдруг они есть в файле
+            g_suffixes.push_back(part);
         }
 
-        if (commaPos == string::npos)
-            break;
-
-        pos = commaPos + 1;
+        if (commaPos == string::npos) break;
+        curPos = commaPos + 1;
     }
 }
 
-// загрузка окончаний из текстового файла
 bool loadSuffixesFromFile(const string &filename) {
     g_suffixes.clear();
-
     ifstream in(filename.c_str(), ios::binary);
-    if (!in.is_open()) {
-        return false;
-    }
-
+    if (!in.is_open()) return false;
     string line;
-    while (getline(in, line)) {
-        parseSuffixLine(line);
-    }
-
-    // важно: никаких sort/unique — количество суффиксов должно
-    // совпадать с тем, что в файле (например, 370).
+    while (getline(in, line)) parseSuffixLine(line);
     return !g_suffixes.empty();
 }
 
-// проверка: заканчивается ли слово на одно из считанных окончаний
 bool wordHasDefinitionSuffix(const char *word) {
-    if (!word || g_suffixes.empty())
-        return false;
-
+    if (!word || g_suffixes.empty()) return false;
     string w(word);
 
     for (size_t i = 0; i < g_suffixes.size(); ++i) {
@@ -121,48 +90,65 @@ bool wordHasDefinitionSuffix(const char *word) {
     return false;
 }
 
-// количество загруженных суффиксов (для вывода в терминал)
-std::size_t getSuffixesCount() {
-    return g_suffixes.size();
-}
+std::size_t getSuffixesCount() { return g_suffixes.size(); }
 
-// список суффиксов одной строкой (для вывода в терминал)
 std::string getSuffixesListString() {
     ostringstream oss;
     for (size_t i = 0; i < g_suffixes.size(); ++i) {
         oss << g_suffixes[i];
-        if (i + 1 < g_suffixes.size())
-            oss << ", ";
+        if (i + 1 < g_suffixes.size()) oss << ", ";
     }
     return oss.str();
 }
 
-// русская буква? (Windows-1251)
+// Русская буква (CP1251)
 static int is_russian_letter(int ch) {
     return (ch >= 0xC0 && ch <= 0xFF) || ch == 0xA8 || ch == 0xB8;
 }
 
-// знак препинания для отдельного токена
+// Является ли символ частью слова (буква, цифра, подчеркивание)
+// Дефис обрабатывается отдельно в read_identifier
+static bool is_word_char(int ch) {
+    return is_russian_letter(ch) || isalpha(ch) || ch == '_' || isdigit(ch);
+}
+
 static int is_punctuation(int ch) {
     return ch == ',' || ch == '.' || ch == '!' || ch == '?' ||
            ch == ';' || ch == ':' || ch == '-' || ch == '(' ||
-           ch == ')' || ch == '\"' || ch == '\'' || ch == 'Е';
+           ch == ')' || ch == '\"' || ch == '\'' || ch == '\n' || ch == '\r';
 }
 
-// пропуск пробелов
 static void skip_whitespace() {
     while (src[pos] != '\0' && isspace((unsigned char)src[pos])) pos++;
 }
 
-// читаем идентификатор (слово). Важно: дефис не входит в слово.
+// --- ИЗМЕНЕНИЕ 1: Чтение слова с поддержкой дефисов внутри (кто-то, по-русски) ---
 static char *read_identifier() {
     int start = pos;
-    while (src[pos] != '\0' &&
-           (is_russian_letter((unsigned char)src[pos]) ||
-            isalpha((unsigned char)src[pos]) ||
-            src[pos] == '_')) {
-        pos++;
+
+    while (src[pos] != '\0') {
+        unsigned char c = (unsigned char)src[pos];
+
+        if (is_word_char(c)) {
+            pos++;
+        }
+        else if (c == '-') {
+            // Дефис считаем частью слова ТОЛЬКО если он внутри слова:
+            // Слева у нас уже есть символы (pos > start),
+            // а справа должна быть буква.
+            // Иначе это тире или минус.
+            if (pos > start && is_word_char((unsigned char)src[pos + 1])) {
+                pos++;
+            } else {
+                // Это дефис в конце слова или тире -- прерываем слово
+                break;
+            }
+        }
+        else {
+            break;
+        }
     }
+
     int length = pos - start;
     if (length == 0) return NULL;
     char *ident = (char*)malloc(length + 1);
@@ -171,9 +157,9 @@ static char *read_identifier() {
     return ident;
 }
 
-// читаем пунктуацию (многоточие как один токен)
 static char *read_punctuation() {
     int start = pos;
+    // Многоточие
     if (src[pos] == '.' && src[pos + 1] == '.' && src[pos + 2] == '.') {
         pos += 3;
         char *punct = (char*)malloc(4);
@@ -181,7 +167,10 @@ static char *read_punctuation() {
         punct[3] = '\0';
         return punct;
     }
-    if (is_punctuation((unsigned char)src[pos])) {
+
+    // Одиночная пунктуация (включая одиночный дефис/тире, если он не попал в слово)
+    // Любой символ, который не буква и не пробел, считаем пунктуацией для сохранения структуры
+    if (src[pos] != '\0') {
         pos++;
         char *punct = (char*)malloc(2);
         punct[0] = src[start];
@@ -191,11 +180,9 @@ static char *read_punctuation() {
     return NULL;
 }
 
-// лексер: разбивает входную строку на токены
 Token *lex(const char *input) {
     src = input;
     pos = 0;
-
     Token *head = NULL;
     Token *tail = NULL;
 
@@ -203,104 +190,54 @@ Token *lex(const char *input) {
         skip_whitespace();
         if (src[pos] == '\0') break;
 
-        char current = src[pos];
-        if (is_russian_letter((unsigned char)current) ||
-            isalpha((unsigned char)current)) {
+        unsigned char current = (unsigned char)src[pos];
 
+        // Пробуем прочитать как слово
+        if (is_word_char(current)) {
             char *ident = read_identifier();
-            if (ident != NULL) {
+            if (ident) {
                 Token *token = (Token*)malloc(sizeof(Token));
                 token->type  = TOK_IDENT;
                 token->value = _strdup(ident);
-                token->prev  = NULL;
-                token->next  = NULL;
-                token->flag  = false;
-
-                if (head == NULL) {
-                    head = tail = token;
-                } else {
-                    tail->next = token;
-                    token->prev = tail;
-                    tail = token;
-                }
-
+                token->prev  = NULL; token->next = NULL; token->flag = false;
+                if (!head) head = tail = token;
+                else { tail->next = token; token->prev = tail; tail = token; }
                 free(ident);
+                continue;
             }
-            continue;
+        }
 
-        } else if (is_punctuation((unsigned char)current)) {
-            char *punct = read_punctuation();
-            if (punct != NULL) {
-                Token *token = (Token*)malloc(sizeof(Token));
-                token->type  = TOK_PUNCTUATION;
-                token->value = _strdup(punct);
-                token->prev  = NULL;
-                token->next  = NULL;
-                token->flag  = false;
-
-                if (head == NULL) {
-                    head = tail = token;
-                } else {
-                    tail->next = token;
-                    token->prev = tail;
-                    tail = token;
-                }
-
-                free(punct);
-            }
-            continue;
-
-        } else {
-            // всё, что не буква и не "нормальная" пунктуация — отдельный токен
-            char symbol[2] = { current, '\0' };
+        // Если не слово, читаем как пунктуацию
+        char *punct = read_punctuation();
+        if (punct) {
             Token *token = (Token*)malloc(sizeof(Token));
             token->type  = TOK_PUNCTUATION;
-            token->value = _strdup(symbol);
-            token->prev  = NULL;
-            token->next  = NULL;
-            token->flag  = false;
-
-            if (head == NULL) {
-                head = tail = token;
-            } else {
-                tail->next = token;
-                token->prev = tail;
-                tail = token;
-            }
-
-            pos++;
+            token->value = _strdup(punct);
+            token->prev  = NULL; token->next = NULL; token->flag = false;
+            if (!head) head = tail = token;
+            else { tail->next = token; token->prev = tail; tail = token; }
+            free(punct);
         }
     }
 
-    // служебный конец
     Token *eof = (Token*)malloc(sizeof(Token));
-    eof->type  = TOK_EOF;
-    eof->value = _strdup("EOF");
-    eof->prev  = tail;
-    eof->next  = NULL;
-    eof->flag  = false;
+    eof->type = TOK_EOF; eof->value = _strdup("EOF");
+    eof->prev = tail; eof->next = NULL; eof->flag = false;
     if (tail) tail->next = eof; else head = eof;
-
     return head;
 }
 
-// помечаем слова-токены по окончаниям
-// дополнительно игнорируем слова, если внутри есть дефис
 void mark_tokens_with_endings(Token *head) {
     for (Token *current = head; current != NULL; current = current->next) {
         if (current->type != TOK_IDENT || current->value == NULL) continue;
 
-        // защита от "что-то" и т.п.
-        if (strchr(current->value, '-') != NULL) {
-            current->flag = false;
-            continue;
-        }
+        // --- ИЗМЕНЕНИЕ: Убрана проверка, игнорирующая слова с дефисом.
+        // Теперь "какой-то" будет проверяться на окончание "то".
 
         current->flag = wordHasDefinitionSuffix(current->value);
     }
 }
 
-// освободить всю память списка токенов
 void free_tokens(Token *head) {
     for (Token *cur = head; cur != NULL; ) {
         Token *next = cur->next;
@@ -310,11 +247,9 @@ void free_tokens(Token *head) {
     }
 }
 
-// читает файл целиком в строку (двоичное чтение)
 bool readTextFromFile(const string &filename, string &outContent) {
     ifstream file(filename, ios::binary);
     if (!file.is_open()) return false;
-
     file.seekg(0, ios::end);
     streamoff fileSize = file.tellg();
     if (fileSize < 0) fileSize = 0;
@@ -325,165 +260,156 @@ bool readTextFromFile(const string &filename, string &outContent) {
     return true;
 }
 
-// сразу пишем помеченный текст в файл (без промежуточной строки)
-// + нумерация предложений прямо в тексте: 1), 2), 3) ...
+// --- ИЗМЕНЕНИЕ 2 и 3: Вывод предложений с новой строки и использование символа '±' ---
 bool writeMarkedTextToFile(const string &outputFilename,
                            Token *head,
-                           const string &originalText,
+                           const string &originalText, // Больше не используется для сборки, берем токены
                            int defCount) {
     ofstream out(outputFilename, ios::binary);
     if (!out.is_open()) return false;
 
-    // шапка
-    string hdr = string("Найдено определений: ") + to_string(defCount) + "\r\n";
+    // Шапка
+    string hdr = string("Найдено определений: ") + to_string(defCount) + "\r\n\r\n";
     out.write(hdr.c_str(), hdr.size());
 
-    Token *currentToken = head;
-    string currentWord;
+    int sentenceNumber = 1;
+    bool startOfSentence = true;
 
-    int  sentenceNumber   = 1;  // номер текущего предложения
-    bool atSentenceStart  = true; // флаг "мы в начале предложения"
+    // Символ пометки
+    const string markSymbol = "±";
 
-    // идём по исходному тексту
-    for (size_t i = 0; i < originalText.size(); ++i) {
-        unsigned char c = (unsigned char)originalText[i];
+    Token *curr = head;
+    while (curr && curr->type != TOK_EOF) {
 
-        // если мы в начале предложения, то ждём первый "не пробельный" символ
-        // и перед ним выводим номер: 1), 2), ...
-        if (atSentenceStart) {
-            if (!isspace(c)) {
-                ostringstream tmp;
-                tmp << sentenceNumber << ") ";
-                string numStr = tmp.str();
-                out.write(numStr.c_str(), (std::streamsize)numStr.size());
-                atSentenceStart = false;
-            }
+        // 1. Обработка начала предложения (нумерация)
+        if (startOfSentence) {
+            // Пропускаем пробелы в начале предложения (токены с пробелами лексером не сохраняются,
+            // но нам и не нужно сохранять форматирование пробелов между предложениями, раз мы делаем new line)
+
+            // Записываем номер: "1) "
+            ostringstream oss;
+            oss << sentenceNumber << ") ";
+            string numStr = oss.str();
+            out.write(numStr.c_str(), numStr.size());
+            startOfSentence = false;
         }
 
-        if (is_russian_letter(c) || isalpha(c) || c == '_') {
-            // собираем слово
-            currentWord.push_back((char)c);
-        } else {
-            // закончили слово перед небуквенным символом
-            if (!currentWord.empty()) {
-                while (currentToken && currentToken->type != TOK_IDENT)
-                    currentToken = currentToken->next;
-
-                if (currentToken && currentToken->type == TOK_IDENT) {
-                    if (currentToken->flag) out.put('[');
-                    out.write(currentToken->value,
-                              (std::streamsize)strlen(currentToken->value));
-                    if (currentToken->flag) out.put(']');
-                    currentToken = currentToken->next;
-                } else {
-                    out.write(currentWord.c_str(),
-                              (std::streamsize)currentWord.size());
-                }
-                currentWord.clear();
+        // 2. Вывод токена
+        if (curr->type == TOK_IDENT) {
+            // Если помечено - ставим ±
+            if (curr->flag) {
+                out.write(markSymbol.c_str(), markSymbol.size());
             }
+            out.write(curr->value, strlen(curr->value));
+        } else {
+            // Пунктуация
+            out.write(curr->value, strlen(curr->value));
+        }
 
-            // обработка знаков препинания (в т.ч. многоточия)
-            if (c == '.' &&
-                i + 2 < originalText.size() &&
-                originalText[i + 1] == '.' &&
-                originalText[i + 2] == '.') {
+        // 3. Логика пробелов
+        // Лексер съел пробелы. Нам нужно восстановить пробел после слова,
+        // если следующий токен - это слово или открывающая скобка/кавычка.
+        // Если следующий токен - запятая или точка, пробел не нужен.
+        if (curr->next && curr->next->type != TOK_EOF) {
+            Token *next = curr->next;
+            bool needSpace = false;
 
-                // многоточие: выводим как есть и считаем концом предложения
-                out.write("...", 3);
-                i += 2; // ещё две точки "съели"
-
-                sentenceNumber++;
-                atSentenceStart = true;
-            } else {
-                // обычный одиночный символ
-                out.put((char)c);
-
-                // конец предложения по . ! ?
-                if (c == '.' || c == '!' || c == '?') {
-                    sentenceNumber++;
-                    atSentenceStart = true;
+            // Простейшая эвристика: нужен пробел, если следом идет слово
+            if (next->type == TOK_IDENT) {
+                needSpace = true;
+                // Исключение: открывающая скобка перед словом не требует пробела перед собой?
+                // Нет, обычно "слово (слово)".
+            }
+            // Если следом пунктуация, пробел нужен только если это тире, открывающая скобка/кавычка
+            else if (next->type == TOK_PUNCTUATION) {
+                char c = next->value[0];
+                if (c == '-' && strlen(next->value) == 1) needSpace = true; // тире
+                if (c == '(' || c == '\"' || c == '\'') {
+                     // С пробелами вокруг кавычек сложно без контекста, но обычно перед открывающей нужен пробел.
+                     // В рамках простой лабы ставим пробел.
+                     if (curr->type != TOK_PUNCTUATION || strcmp(curr->value, "(") != 0)
+                        needSpace = true;
                 }
             }
-        }
-    }
 
-    // хвост, если текст закончился на букве
-    if (!currentWord.empty()) {
-        while (currentToken && currentToken->type != TOK_IDENT)
-            currentToken = currentToken->next;
+            // Не ставим пробел перед точкой, запятой, двоеточием, закрывающей скобкой
+            if (next->type == TOK_PUNCTUATION) {
+                char c = next->value[0];
+                if (c == '.' || c == ',' || c == '!' || c == '?' || c == ':' || c == ';' || c == ')')
+                    needSpace = false;
+            }
 
-        if (currentToken && currentToken->type == TOK_IDENT) {
-            if (currentToken->flag) out.put('[');
-            out.write(currentToken->value,
-                      (std::streamsize)strlen(currentToken->value));
-            if (currentToken->flag) out.put(']');
-            currentToken = currentToken->next;
-        } else {
-            out.write(currentWord.c_str(),
-                      (std::streamsize)currentWord.size());
+            if (needSpace) {
+                out.put(' ');
+            }
         }
+
+        // 4. Проверка на конец предложения
+        bool isEnd = false;
+        if (curr->type == TOK_PUNCTUATION) {
+            if (strcmp(curr->value, ".") == 0 ||
+                strcmp(curr->value, "!") == 0 ||
+                strcmp(curr->value, "?") == 0 ||
+                strcmp(curr->value, "...") == 0) {
+                isEnd = true;
+            }
+        }
+
+        if (isEnd) {
+            out.write("\r\n", 2); // Новая строка
+            sentenceNumber++;
+            startOfSentence = true;
+        }
+
+        curr = curr->next;
     }
 
     out.close();
     return true;
 }
 
-// запись произвольной строки в файл
 bool writeProcessedTextToFile(const string &outputFilename, const string &text) {
     ofstream outFile(outputFilename, ios::binary);
     if (!outFile.is_open()) return false;
-    outFile.write(text.c_str(), (std::streamsize)text.size());
+    outFile.write(text.c_str(), text.size());
     outFile.close();
     return true;
 }
 
-// структура для статистики по одному слову
 struct DefInfo {
-    int count;               // сколько раз слово было "определением"
-    vector<int> sentences;   // номера предложений, где оно встречается
-
+    int count;
+    vector<int> sentences;
     DefInfo() : count(0) {}
 };
 
-// проверка, что токен завершает предложение
 static bool isSentenceTerminatorToken(const Token *t) {
-    if (!t) return false;
-    if (t->type != TOK_PUNCTUATION || t->value == NULL) return false;
-
-    return strcmp(t->value, ".")   == 0 ||
-           strcmp(t->value, "!")   == 0 ||
-           strcmp(t->value, "?")   == 0 ||
+    if (!t || t->type != TOK_PUNCTUATION) return false;
+    return strcmp(t->value, ".") == 0 ||
+           strcmp(t->value, "!") == 0 ||
+           strcmp(t->value, "?") == 0 ||
            strcmp(t->value, "...") == 0;
 }
 
-// формирует текст отчёта по всем найденным "определениям"
 string buildDefinitionsReport(Token *head, int defCount) {
     map<string, DefInfo> stats;
-
-    int sentenceIndex = 1; // нумерация предложений с 1
+    int sentenceIndex = 1;
 
     for (Token *cur = head; cur != NULL; cur = cur->next) {
-        // обновляем номер предложения
-        if (isSentenceTerminatorToken(cur)) {
-            sentenceIndex++;
-        }
-
-        // интересуют только токены-слова, помеченные как "определение"
         if (cur->type == TOK_IDENT && cur->flag && cur->value != NULL) {
             string word(cur->value);
-
             DefInfo &info = stats[word];
             info.count++;
-
-            // чтобы один и тот же номер предложения не добавлять по нескольку раз
             if (info.sentences.empty() || info.sentences.back() != sentenceIndex) {
                 info.sentences.push_back(sentenceIndex);
             }
         }
+        // Увеличиваем счетчик ПОСЛЕ обработки слова, если это конец
+        if (isSentenceTerminatorToken(cur)) {
+            sentenceIndex++;
+        }
     }
 
     ostringstream oss;
-
     oss << "Всего найдено определений: " << defCount << "\r\n\r\n";
 
     if (stats.empty()) {
@@ -492,22 +418,16 @@ string buildDefinitionsReport(Token *head, int defCount) {
     }
 
     oss << "Список слов, являющихся искомым членом предложения:\r\n";
-
     int idx = 1;
-    for (map<string, DefInfo>::const_iterator it = stats.begin();
-         it != stats.end(); ++it) {
+    for (map<string, DefInfo>::const_iterator it = stats.begin(); it != stats.end(); ++it) {
         const string &word = it->first;
         const DefInfo &info = it->second;
-
-        oss << idx++ << ") " << word
-            << " — всего " << info.count << " раз(а); предложения: ";
-
+        oss << idx++ << ") " << word << " — всего " << info.count << " раз(а); предложения: ";
         for (size_t i = 0; i < info.sentences.size(); ++i) {
             if (i > 0) oss << ", ";
             oss << info.sentences[i];
         }
         oss << "\r\n";
     }
-
     return oss.str();
 }

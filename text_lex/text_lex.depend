@@ -1,11 +1,11 @@
 # depslib dependency file v1.0
-1761054465 source:c:\users\timurr\documents\github\text_analyzer\text_lex\main.cpp
+1764664394 source:c:\users\timurr\documents\github\text_analyzer\text_lex\main.cpp
+	"header.hpp"
 	<iostream>
+	<string>
 	<windows.h>
-	<stdio.h>
-	<stdlib.h>
-	<string.h>
-	<ctype.h>
+	<cctype>
+	<conio.h>
 
 1762706252 source:f:\marinelogbook\text_analyzer\text_lex\header.hpp
 	<string>
@@ -57,4 +57,21 @@
 	<string>
 	<windows.h>
 	<cctype>
+
+1764662866 source:c:\users\timurr\documents\github\text_analyzer\text_lex\logic.cpp
+	"header.hpp"
+	<iostream>
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<ctype.h>
+	<fstream>
+	<string>
+	<vector>
+	<map>
+	<sstream>
+	<algorithm>
+
+1764065789 c:\users\timurr\documents\github\text_analyzer\text_lex\header.hpp
+	<string>
 

@@ -4,8 +4,15 @@
 #include <string>
 #include <windows.h>
 #include <cctype>
+#include <conio.h> // Добавлено для _getch()
 
 using namespace std;
+
+// Функция ожидания нажатия клавиши перед выходом
+static void waitAndExit() {
+    cout << "\nНажмите любую клавишу для выхода...";
+    _getch();
+}
 
 // приветствие и краткая подсказка
 static void showWelcome() {
@@ -28,6 +35,12 @@ static int getMenuChoice() {
 
         string choice;
         getline(cin, choice);
+
+        // Защита от бесконечного цикла, если поток ввода сломался (например, EOF)
+        if (cin.fail()) {
+            cin.clear();
+            return 2;
+        }
 
         if (choice == "1") return 1;
         if (choice == "2") return 2;
@@ -105,10 +118,14 @@ static bool initSuffixes() {
     cout << "Окончания успешно загружены.\n";
     cout << "Всего считано окончаний: " << cnt << "\n";
 
+    // --- ИЗМЕНЕНИЕ: Вывод списка суффиксов убран по требованию ---
+    /*
     if (cnt > 0) {
         cout << "Список окончаний, по которым будет идти проверка:\n";
         cout << getSuffixesListString() << "\n\n";
     }
+    */
+    cout << "\n";
 
     return true;
 }
@@ -213,13 +230,13 @@ int main(int argc, char *argv[]) {
     // кодировка консоли Windows для корректного вывода русского текста и символа '±'
     SetConsoleCP(1251);
     SetConsoleOutputCP(1251);
-    (void)argc; (void)argv;
 
     showWelcome();
 
     // сначала загружаем окончания из sufix.txt
     if (!initSuffixes()) {
         cout << "\nФайл окончаний не загружен. Завершение работы программы.\n";
+        waitAndExit(); // Ждем нажатия клавиши при ошибке
         return 0;
     }
 
@@ -232,6 +249,7 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
+
+    waitAndExit(); // --- ИЗМЕНЕНИЕ: Ждем нажатия клавиши перед полным закрытием ---
     return 0;
 }
-
