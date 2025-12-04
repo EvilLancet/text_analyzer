@@ -2,72 +2,81 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 #include <windows.h>
 #include <cctype>
-#include <conio.h> // Добавлено для _getch()
+#include <conio.h>
+#include <algorithm> // для transform
 
 using namespace std;
 
+// ==========================================
+// Утилиты для работы с консолью (Цвета и UI)
+// ==========================================
+
+enum ConsoleColor {
+    COLOR_DEFAULT = 7,
+    COLOR_BLUE    = 9,
+    COLOR_GREEN   = 10,
+    COLOR_CYAN    = 11,
+    COLOR_RED     = 12,
+    COLOR_YELLOW  = 14,
+    COLOR_WHITE   = 15
+};
+
+static void setColor(ConsoleColor color) {
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, (WORD)color);
+}
+
+static void clearScreen() {
+    system("cls");
+}
+
+static void printHeader() {
+    setColor(COLOR_CYAN);
+    cout << "-------------------------------------------\n";
+    cout << "           Поисковик определений           \n";
+    cout << "-------------------------------------------\n";
+    setColor(COLOR_DEFAULT);
+}
+
+static void printError(const string& msg) {
+    setColor(COLOR_RED);
+    cout << "[Ошибка] " << msg << "\n";
+    setColor(COLOR_DEFAULT);
+}
+
+static void printSuccess(const string& msg) {
+    setColor(COLOR_GREEN);
+    cout << "[Успешно] " << msg << "\n";
+    setColor(COLOR_DEFAULT);
+}
+
+static void printInfo(const string& msg) {
+    setColor(COLOR_YELLOW);
+    cout << "[Инфо] " << msg << "\n";
+    setColor(COLOR_DEFAULT);
+}
+
+// ==========================================
+// Основная логика
+// ==========================================
+
 // Функция ожидания нажатия клавиши перед выходом
+static void waitAnyKey() {
+    setColor(COLOR_DEFAULT);
+    cout << "\nНажмите любую клавишу, чтобы продолжить...";
+    _getch();
+}
+
 static void waitAndExit() {
+    setColor(COLOR_WHITE);
     cout << "\nНажмите любую клавишу для выхода...";
     _getch();
 }
 
-// приветствие и краткая подсказка
-static void showWelcome() {
-    cout << "Добро пожаловать в программу\n";
-    cout << "поиска \"определений\" в тексте\n\n";
-    cout << "Программа читает .txt файл (русский текст),\n";
-    cout << "находит слова с особыми окончаниями и помечает\n";
-    cout << "их символом '±' прямо перед словом.\n";
-    cout << "Результат сохраняется в новый файл *_marked.txt\n";
-    cout << "в той же папке.\n\n";
-}
-
-// запрос пункта меню
-static int getMenuChoice() {
-    while (true) {
-        cout << "Главное меню:\n";
-        cout << " 1 - Обработать текстовый файл (.txt) из текущей директории\n";
-        cout << " 2 - Выход из программы\n";
-        cout << "Ваш выбор (1/2): ";
-
-        string choice;
-        getline(cin, choice);
-
-        // Защита от бесконечного цикла, если поток ввода сломался (например, EOF)
-        if (cin.fail()) {
-            cin.clear();
-            return 2;
-        }
-
-        if (choice == "1") return 1;
-        if (choice == "2") return 2;
-
-        cout << "\nНекорректный ввод. Пожалуйста, введите только 1 или 2.\n\n";
-    }
-}
-
-// простая проверка имени .txt (без пути)
-static bool isValidFileName(const string &name) {
-    if (name.empty()) return false;
-
-    for (char ch : name) {
-        if (ch == '\\' || ch == '/' || ch == ':') return false;
-    }
-
-    size_t dotPos = name.find_last_of('.');
-    if (dotPos == string::npos) return false;
-
-    string ext = name.substr(dotPos);
-    string extLower;
-    for (char c : ext)
-        extLower.push_back((char)tolower((unsigned char)c));
-    return (extLower == ".txt");
-}
-
-// формируем имя выходного файла: input.txt -> input_marked.txt
+// Формируем имя выходного файла: input.txt -> input_marked.txt
 static string buildOutputFileName(const string &inputFile) {
     size_t dotPos = inputFile.find_last_of('.');
     if (dotPos != string::npos) {
@@ -79,7 +88,7 @@ static string buildOutputFileName(const string &inputFile) {
     }
 }
 
-// формируем имя файла со статистикой: input.txt -> input_stat.txt
+// Формируем имя файла со статистикой: input.txt -> input_stat.txt
 static string buildStatFileName(const string &inputFile) {
     size_t dotPos = inputFile.find_last_of('.');
     if (dotPos != string::npos) {
@@ -91,165 +100,220 @@ static string buildStatFileName(const string &inputFile) {
     }
 }
 
-// ожидание Enter
-static void waitForEnter() {
-    cout << "\nНажмите Enter, чтобы продолжить...";
-    string dummy;
-    getline(cin, dummy);
-    cout << "\n";
-}
-
-// загрузка файла с окончаниями: фиксированное имя sufix.txt
+// Загрузка файла с окончаниями
 static bool initSuffixes() {
     const string name = "sufix.txt";
 
-    cout << "Загружается список окончаний из файла \"" << name << "\"...\n";
-    cout << "Файл должен быть в кодировке Windows-1251 (ANSI).\n\n";
+    // Проверка наличия файла перед попыткой чтения
+    DWORD fileAttr = GetFileAttributesA(name.c_str());
+    if (fileAttr == INVALID_FILE_ATTRIBUTES) {
+        printError("Файл \"" + name + "\" не найден!");
+        cout << "Убедитесь, что файл с окончаниями находится в папке с программой.\n";
+        return false;
+    }
 
     if (!loadSuffixesFromFile(name)) {
-        cout << "Ошибка: не удалось прочитать окончания из файла \""
-             << name << "\".\n";
-        cout << "Проверьте, что файл лежит рядом с программой,\n"
-                "доступен для чтения и содержит окончания.\n\n";
+        printError("Не удалось прочитать окончания из файла \"" + name + "\".");
         return false;
     }
 
     std::size_t cnt = getSuffixesCount();
-    cout << "Окончания успешно загружены.\n";
-    cout << "Всего считано окончаний: " << cnt << "\n";
-
-    // --- ИЗМЕНЕНИЕ: Вывод списка суффиксов убран по требованию ---
-    /*
-    if (cnt > 0) {
-        cout << "Список окончаний, по которым будет идти проверка:\n";
-        cout << getSuffixesListString() << "\n\n";
-    }
-    */
-    cout << "\n";
-
+    printSuccess("Окончания загружены (" + to_string(cnt) + " шт.)");
     return true;
 }
 
-// обработка выбранного текстового файла
+// Получение списка .txt файлов в текущей директории
+static vector<string> getTxtFiles() {
+    vector<string> files;
+    WIN32_FIND_DATAA findData;
+    HANDLE hFind = FindFirstFileA("*.txt", &findData);
+
+    if (hFind == INVALID_HANDLE_VALUE) {
+        return files;
+    }
+
+    do {
+        string fname = findData.cFileName;
+
+        // Фильтрация: исключаем системный файл суффиксов и уже обработанные файлы
+        // чтобы не засорять список
+        if (fname == "sufix.txt") continue;
+        if (fname.find("_marked.txt") != string::npos) continue;
+        if (fname.find("_stat.txt") != string::npos) continue;
+
+        files.push_back(fname);
+    } while (FindNextFileA(hFind, &findData));
+
+    FindClose(hFind);
+    return files;
+}
+
+// Обработка выбранного текстового файла
 static void handleProcessFile() {
-    cout << "\nВведите имя текстового файла из текущей директории.\n";
-    cout << "Требования:\n";
-    cout << " - файл должен иметь расширение .txt\n";
-    cout << " - указывать только имя файла без пути (например: primer.txt)\n";
-    cout << " - файл должен лежать рядом с программой\n";
-    cout << " - файл должен быть сохранён в кодировке Windows-1251 (ANSI)\n\n";
+    clearScreen();
+    printHeader();
+    cout << "\nПоиск текстовых файлов в текущей папке...\n";
 
-    cout << "Имя файла: ";
-    string fileName;
-    getline(cin, fileName);
+    vector<string> files = getTxtFiles();
 
-    if (!isValidFileName(fileName)) {
-        cout << "\nОшибка: некорректное имя файла. Пожалуйста, введите что-то вроде text.txt\n";
-        waitForEnter();
+    if (files.empty()) {
+        printInfo("Подходящие файлы .txt не найдены.");
+        cout << "Поместите файлы для обработки в папку с программой.\n";
+        waitAnyKey();
         return;
     }
+
+    cout << "Найдены файлы для обработки:\n\n";
+    for (size_t i = 0; i < files.size(); ++i) {
+        setColor(COLOR_WHITE);
+        cout << " " << (i + 1) << ". ";
+        setColor(COLOR_GREEN);
+        cout << files[i] << "\n";
+    }
+    setColor(COLOR_DEFAULT);
+
+    cout << "\nВведите номер файла (или 0 для отмены): ";
+    int choice = 0;
+    if (!(cin >> choice)) {
+        cin.clear();
+        string dummy; getline(cin, dummy);
+        printError("Некорректный ввод.");
+        waitAnyKey();
+        return;
+    }
+    // Очищаем буфер после ввода числа
+    string dummy; getline(cin, dummy);
+
+    if (choice == 0) return;
+
+    if (choice < 1 || choice > (int)files.size()) {
+        printError("Неверный номер файла.");
+        waitAnyKey();
+        return;
+    }
+
+    string fileName = files[choice - 1];
+
+    cout << "\n-------------------------------------------\n";
+    printInfo("Чтение файла: " + fileName);
 
     // читаем исходный текст
     string content;
     if (!readTextFromFile(fileName, content)) {
-        cout << "\nОшибка: не удалось открыть \"" << fileName << "\".\n";
-        cout << "Проверьте, что файл существует и доступен для чтения.\n";
-        waitForEnter();
+        printError("Не удалось открыть \"" + fileName + "\".");
+        waitAnyKey();
         return;
     }
 
-    cout << "\nФайл \"" << fileName << "\" успешно прочитан.\n";
-    cout << "Длина текста: " << content.size() << " байт.\n";
-
     // лексер и пометки
-    cout << "\nВыполняется лексический разбор и поиск окончаний...\n";
+    cout << "Лексический разбор и поиск определений...\n";
     Token *tokens = lex(content.c_str());
     mark_tokens_with_endings(tokens);
 
-    // считаем токены и помеченные слова
+    // считаем статистику
     int defCount = 0;
-    int tokenCount = 0;
-    int wordCount  = 0;
-
     for (Token *cur = tokens; cur != NULL; cur = cur->next) {
-        if (cur->type != TOK_EOF)
-            tokenCount++;
-        if (cur->type == TOK_IDENT)
-            wordCount++;
-        if (cur->flag)
-            defCount++;
+        if (cur->flag) defCount++;
     }
 
-    cout << "Всего токенов: " << tokenCount
-         << ", слов: " << wordCount
-         << ", помечено определений: " << defCount << "\n";
-
-    // формируем текст отчёта по найденным словам
-    cout << "\nФормируется отчёт по найденным словам...\n";
-    string reportText = buildDefinitionsReport(tokens, defCount);
+    // Сохранение отчета
     string reportFileName = buildStatFileName(fileName);
-    if (!writeProcessedTextToFile(reportFileName, reportText)) {
-        cout << "\nПредупреждение: не удалось записать отчёт в файл \""
-             << reportFileName << "\".\n";
+    string reportText = buildDefinitionsReport(tokens, defCount);
+
+    if (writeProcessedTextToFile(reportFileName, reportText)) {
+        printSuccess("Статистика сохранена: " + reportFileName);
     } else {
-        cout << "Отчёт по найденным словам сохранён в файл: "
-             << reportFileName << "\n";
+        printError("Ошибка записи статистики.");
     }
 
-    // выводим отчёт сразу в терминал
-    cout << "\n----- Отчёт по найденным словам -----\n";
-    cout << reportText << "\n";
-    cout << "-------------------------------------\n";
+    // Вывод краткого отчета на экран
+    setColor(COLOR_CYAN);
+    cout << "\n--- Найдено определений: " << defCount << " ---\n";
+    setColor(COLOR_DEFAULT);
 
-    // куда писать размеченный текст
+    // Сохранение размеченного текста
     string outputFileName = buildOutputFileName(fileName);
-
-    cout << "\nВыполняется запись размеченного текста в файл \""
-         << outputFileName << "\"...\n";
-
-    // сразу пишем результат в файл (без большой промежуточной строки)
-    if (!writeMarkedTextToFile(outputFileName, tokens, content, defCount)) {
-        cout << "\nОшибка: не удалось создать файл \""
-             << outputFileName << "\" для записи результата.\n";
-        free_tokens(tokens);
-        waitForEnter();
-        return;
+    if (writeMarkedTextToFile(outputFileName, tokens, content, defCount)) {
+        printSuccess("Результат сохранён: " + outputFileName);
+    } else {
+        printError("Ошибка записи результата.");
     }
 
-    // чистим память
     free_tokens(tokens);
+    waitAnyKey();
+}
 
-    cout << "\nНайдено определений: " << defCount << "\n";
-    cout << "Размеченный текст с нумерацией предложений сохранён в файл: "
-         << outputFileName << "\n";
+// Главное меню
+static void showMainMenu() {
+    while (true) {
+        clearScreen();
+        printHeader();
 
-    waitForEnter();
+        // Выводим статус, если нужно (например, суффиксы загружены)
+        // Здесь можно добавить проверку статуса, если потребуется
+
+        cout << "\nВыберите действие:\n\n";
+        cout << " [1] Обработать файл (выбрать из списка)\n";
+        cout << " [2] О программе / Помощь\n";
+        cout << " [3] Выход\n";
+        cout << "\nВаш выбор: ";
+
+        char choice = _getch();
+        cout << choice << "\n"; // Эхо нажатой клавиши
+
+        switch (choice) {
+            case '1':
+                handleProcessFile();
+                break;
+            case '2':
+                clearScreen();
+                printHeader();
+                cout << "\nПрограмма читает .txt файл (русский текст),\n";
+                cout << "находит слова с окончаниями из sufix.txt и помечает\n";
+                cout << "их символом '±'.\n\n";
+                cout << "Требования:\n";
+                cout << " - Кодировка файлов: Windows-1251 (ANSI)\n";
+                cout << " - Файлы должны лежать рядом с .exe\n";
+                waitAnyKey();
+                break;
+            case '3':
+                return; // Выход из showMainMenu, попадаем в main и на выход
+            default:
+                break;
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
-    // кодировка консоли Windows для корректного вывода русского текста и символа '±'
+    // Настройка консоли
     SetConsoleCP(1251);
     SetConsoleOutputCP(1251);
 
-    showWelcome();
+    // Пытаемся скрыть мигающий курсор для красоты (опционально)
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(hConsole, &cursorInfo);
+    cursorInfo.bVisible = true; // Оставим видимым для ввода
+    SetConsoleCursorInfo(hConsole, &cursorInfo);
 
-    // сначала загружаем окончания из sufix.txt
+    clearScreen();
+    printHeader();
+
+    // Загрузка суффиксов при старте
+    cout << "\nИнициализация...\n";
     if (!initSuffixes()) {
-        cout << "\nФайл окончаний не загружен. Завершение работы программы.\n";
-        waitAndExit(); // Ждем нажатия клавиши при ошибке
+        cout << "\nКритическая ошибка. Работа невозможна.\n";
+        waitAndExit();
         return 0;
     }
 
-    while (true) {
-        int choice = getMenuChoice();
-        if (choice == 1) {
-            handleProcessFile();
-        } else if (choice == 2) {
-            cout << "Завершение работы. До свидания!\n";
-            break;
-        }
-    }
+    // Небольшая пауза, чтобы пользователь увидел статус загрузки
+    Sleep(1500);
 
-    waitAndExit(); // --- ИЗМЕНЕНИЕ: Ждем нажатия клавиши перед полным закрытием ---
+    // Запуск цикла меню
+    showMainMenu();
+
+    cout << "\nЗавершение работы. До свидания!\n";
+    Sleep(1000);
     return 0;
 }
