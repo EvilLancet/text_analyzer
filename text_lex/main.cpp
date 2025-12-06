@@ -1,19 +1,10 @@
 #include "header.hpp"
 
-#include <iostream>
-#include <string>
-#include <vector>
-#include <windows.h>
-#include <cctype>
-#include <conio.h>
-#include <algorithm> // для transform
+
 
 using namespace std;
 
-// ==========================================
-// Утилиты для работы с консолью (Цвета и UI)
-// ==========================================
-
+// Коды цветов для WinAPI
 enum ConsoleColor {
     COLOR_DEFAULT = 7,
     COLOR_BLUE    = 9,
@@ -24,15 +15,18 @@ enum ConsoleColor {
     COLOR_WHITE   = 15
 };
 
+// Установка цвета текста в консоли
 static void setColor(ConsoleColor color) {
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     SetConsoleTextAttribute(hConsole, (WORD)color);
 }
 
-static void clearScreen() {
+// Очистка экрана
+inline void clearScreen() {
     system("cls");
 }
 
+// Вывод заголовка программы
 static void printHeader() {
     setColor(COLOR_CYAN);
     cout << "-------------------------------------------\n";
@@ -41,42 +35,44 @@ static void printHeader() {
     setColor(COLOR_DEFAULT);
 }
 
+
+// Вывод сообщения об ошибке
 static void printError(const string& msg) {
     setColor(COLOR_RED);
     cout << "[Ошибка] " << msg << "\n";
     setColor(COLOR_DEFAULT);
 }
 
+// Вывод сообщения об успехе
 static void printSuccess(const string& msg) {
     setColor(COLOR_GREEN);
     cout << "[Успешно] " << msg << "\n";
     setColor(COLOR_DEFAULT);
 }
 
+// Вывод информационной справки
 static void printInfo(const string& msg) {
     setColor(COLOR_YELLOW);
     cout << "[Инфо] " << msg << "\n";
     setColor(COLOR_DEFAULT);
 }
 
-// ==========================================
-// Основная логика
-// ==========================================
 
-// Функция ожидания нажатия клавиши перед выходом
+// Ожидание нажатия клавиши для продолжения работы
 static void waitAnyKey() {
     setColor(COLOR_DEFAULT);
     cout << "\nНажмите любую клавишу, чтобы продолжить...";
     _getch();
 }
 
+// Ожидание нажатия перед выходом
 static void waitAndExit() {
     setColor(COLOR_WHITE);
     cout << "\nНажмите любую клавишу для выхода...";
     _getch();
 }
 
-// Формируем имя выходного файла: input.txt -> input_marked.txt
+// Генерация имени выходного файла
 static string buildOutputFileName(const string &inputFile) {
     size_t dotPos = inputFile.find_last_of('.');
     if (dotPos != string::npos) {
@@ -88,7 +84,7 @@ static string buildOutputFileName(const string &inputFile) {
     }
 }
 
-// Формируем имя файла со статистикой: input.txt -> input_stat.txt
+// Генерация имени файла для отчета по статистике
 static string buildStatFileName(const string &inputFile) {
     size_t dotPos = inputFile.find_last_of('.');
     if (dotPos != string::npos) {
@@ -100,7 +96,7 @@ static string buildStatFileName(const string &inputFile) {
     }
 }
 
-// Загрузка файла с окончаниями
+// Инициализация: загрузка списка окончаний из файла sufix.txt
 static bool initSuffixes() {
     const string name = "sufix.txt";
 
@@ -112,6 +108,7 @@ static bool initSuffixes() {
         return false;
     }
 
+    // Попытка чтения данных
     if (!loadSuffixesFromFile(name)) {
         printError("Не удалось прочитать окончания из файла \"" + name + "\".");
         return false;
@@ -122,7 +119,7 @@ static bool initSuffixes() {
     return true;
 }
 
-// Получение списка .txt файлов в текущей директории
+// Сканирование текущей директории на наличие .txt файлов
 static vector<string> getTxtFiles() {
     vector<string> files;
     WIN32_FIND_DATAA findData;
@@ -136,7 +133,6 @@ static vector<string> getTxtFiles() {
         string fname = findData.cFileName;
 
         // Фильтрация: исключаем системный файл суффиксов и уже обработанные файлы
-        // чтобы не засорять список
         if (fname == "sufix.txt") continue;
         if (fname.find("_marked.txt") != string::npos) continue;
         if (fname.find("_stat.txt") != string::npos) continue;
@@ -163,6 +159,7 @@ static void handleProcessFile() {
         return;
     }
 
+    // Вывод списка найденных файлов
     cout << "Найдены файлы для обработки:\n\n";
     for (size_t i = 0; i < files.size(); ++i) {
         setColor(COLOR_WHITE);
@@ -216,7 +213,7 @@ static void handleProcessFile() {
         if (cur->flag) defCount++;
     }
 
-    // Сохранение отчета
+     // Формирование и сохранение файла с отчетом
     string reportFileName = buildStatFileName(fileName);
     string reportText = buildDefinitionsReport(tokens, defCount);
 
@@ -239,6 +236,7 @@ static void handleProcessFile() {
         printError("Ошибка записи результата.");
     }
 
+    // Очистка памяти списка токенов
     free_tokens(tokens);
     waitAnyKey();
 }
@@ -249,17 +247,13 @@ static void showMainMenu() {
         clearScreen();
         printHeader();
 
-        // Выводим статус, если нужно (например, суффиксы загружены)
-        // Здесь можно добавить проверку статуса, если потребуется
-
         cout << "\nВыберите действие:\n\n";
         cout << " [1] Обработать файл (выбрать из списка)\n";
         cout << " [2] О программе / Помощь\n";
         cout << " [3] Выход\n";
-        cout << "\nВаш выбор: ";
 
         char choice = _getch();
-        cout << choice << "\n"; // Эхо нажатой клавиши
+        cout << choice << "\n";
 
         switch (choice) {
             case '1':
@@ -268,16 +262,16 @@ static void showMainMenu() {
             case '2':
                 clearScreen();
                 printHeader();
-                cout << "\nПрограмма читает .txt файл (русский текст),\n";
-                cout << "находит слова с окончаниями из sufix.txt и помечает\n";
-                cout << "их символом '±'.\n\n";
+                cout << "\nПрограмма читает .txt файл, находит\n";
+                cout << "определения с окончаниями из sufix.txt\n";
+                cout << "и помечает их символами [ и ].\n\n";
                 cout << "Требования:\n";
-                cout << " - Кодировка файлов: Windows-1251 (ANSI)\n";
+                cout << " - Кодировка файлов: Windows-1251\n";
                 cout << " - Файлы должны лежать рядом с .exe\n";
                 waitAnyKey();
                 break;
             case '3':
-                return; // Выход из showMainMenu, попадаем в main и на выход
+                return; // Возврат в main для корректного завершения
             default:
                 break;
         }
@@ -288,13 +282,6 @@ int main(int argc, char *argv[]) {
     // Настройка консоли
     SetConsoleCP(1251);
     SetConsoleOutputCP(1251);
-
-    // Пытаемся скрыть мигающий курсор для красоты (опционально)
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    CONSOLE_CURSOR_INFO cursorInfo;
-    GetConsoleCursorInfo(hConsole, &cursorInfo);
-    cursorInfo.bVisible = true; // Оставим видимым для ввода
-    SetConsoleCursorInfo(hConsole, &cursorInfo);
 
     clearScreen();
     printHeader();

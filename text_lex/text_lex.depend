@@ -7,8 +7,21 @@
 	<cctype>
 	<conio.h>
 
-1763922542 source:f:\marinelogbook\text_analyzer\text_lex\header.hpp
+1765016392 source:f:\marinelogbook\text_analyzer\text_lex\header.hpp
 	<string>
+	<iostream>
+	<vector>
+	<windows.h>
+	<cctype>
+	<conio.h>
+	<algorithm>
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<ctype.h>
+	<fstream>
+	<map>
+	<sstream>
 
 1763922569 source:f:\marinelogbook\text_analyzer\text_lex_new\main.cpp
 	"header.hpp"
@@ -34,32 +47,27 @@
 	<sstream>
 	<algorithm>
 
-1764861513 source:f:\marinelogbook\text_analyzer\text_lex\logic.cpp
+1765015939 source:f:\marinelogbook\text_analyzer\text_lex\logic.cpp
 	"header.hpp"
-	<iostream>
-	<stdio.h>
-	<stdlib.h>
-	<string.h>
-	<ctype.h>
-	<fstream>
-	<string>
-	<vector>
-	<map>
-	<sstream>
-	<algorithm>
 
-1763922542 f:\marinelogbook\text_analyzer\text_lex\header.hpp
+1765016392 f:\marinelogbook\text_analyzer\text_lex\header.hpp
 	<string>
-
-1764862365 source:f:\marinelogbook\text_analyzer\text_lex\main.cpp
-	"header.hpp"
 	<iostream>
-	<string>
 	<vector>
 	<windows.h>
 	<cctype>
 	<conio.h>
 	<algorithm>
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	<ctype.h>
+	<fstream>
+	<map>
+	<sstream>
+
+1764870783 source:f:\marinelogbook\text_analyzer\text_lex\main.cpp
+	"header.hpp"
 
 1764662866 source:c:\users\timurr\documents\github\text_analyzer\text_lex\logic.cpp
 	"header.hpp"

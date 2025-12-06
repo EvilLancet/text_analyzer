@@ -2,47 +2,59 @@
 #define HEADER_HPP
 
 #include <string>
+#include <iostream>
+#include <vector>
+#include <windows.h>
+#include <cctype>
+#include <conio.h>
+#include <algorithm>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <fstream>
+#include <map>
+#include <sstream>
 
-// общий заголовок проекта "поиск определений".
-// здесь объявления того, чем пользуются остальные файлы.
 
-// перечисление типов токенов
+
+// типы токенов
 enum TokenT {
     TOK_EOF,          // конец потока
     TOK_IDENT,        // слово
     TOK_PUNCTUATION,  // знаки препинания и прочие одиночные символы
-    TOK_SPACE         // пробелы (не используется)
+    TOK_SPACE         // пробелы
 };
 
-// структура токена (нужна в main.cpp для доступа к полям)
+// структура токена
 struct Token {
     TokenT type;
-    bool   flag;   // пометка "определение"
+    bool   flag;   // флаг - слово определение
     char  *value;
     Token *prev;
     Token *next;
 };
 
-// лексический разбор и пометки
+// Лексический разбор и пометки
 Token *lex(const char *input);
 void   mark_tokens_with_endings(Token *head);
 void   free_tokens(Token *head);
 
-// работа со списком окончаний
+// Работа со списком окончаний
 bool loadSuffixesFromFile(const std::string &filename); // чтение окончаний из файла
 bool wordHasDefinitionSuffix(const char *word);         // проверка слова по окончаниям
 
-// вспомогательные функции для отладки суффиксов
+// Вспомогательные функции для отладки суффиксов
 std::size_t getSuffixesCount();                 // количество загруженных суффиксов
 std::string getSuffixesListString();           // все суффиксы в одной строке
 
-// построение текстового отчёта по найденным словам
+// Построение текстового отчёта по найденным словам
 std::string buildDefinitionsReport(Token *head, int defCount);
 
-// работа с файлами
+// Работа с файлами
 bool readTextFromFile(const std::string &filename, std::string &outContent);
 
-// сразу пишет помеченный текст в файл (без большой промежуточной строки)
+// Пишет размеченный текст в файл
 bool writeMarkedTextToFile(const std::string &outputFilename,
                            Token *head,
                            const std::string &originalText,
