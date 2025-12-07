@@ -145,6 +145,7 @@ static vector<string> getTxtFiles() {
 }
 
 // Обработка выбранного текстового файла
+
 static void handleProcessFile() {
     clearScreen();
     printHeader();
@@ -169,25 +170,33 @@ static void handleProcessFile() {
     }
     setColor(COLOR_DEFAULT);
 
-    cout << "\nВведите номер файла (или 0 для отмены): ";
     int choice = 0;
-    if (!(cin >> choice)) {
-        cin.clear();
+
+    // --- НАЧАЛО ИЗМЕНЕНИЙ ---
+    while (true) {
+        cout << "\nВведите номер файла (или 0 для отмены): ";
+
+        if (!(cin >> choice)) {
+            cin.clear();
+            string dummy; getline(cin, dummy);
+            printError("Некорректный ввод.");
+            // waitAnyKey(); // Убрали, чтобы сразу можно было вводить снова
+            continue; // Возвращаемся в начало цикла
+        }
+        // Очищаем буфер после ввода числа
         string dummy; getline(cin, dummy);
-        printError("Некорректный ввод.");
-        waitAnyKey();
-        return;
-    }
-    // Очищаем буфер после ввода числа
-    string dummy; getline(cin, dummy);
 
-    if (choice == 0) return;
+        if (choice == 0) return;
 
-    if (choice < 1 || choice > (int)files.size()) {
-        printError("Неверный номер файла.");
-        waitAnyKey();
-        return;
+        if (choice < 1 || choice > (int)files.size()) {
+            printError("Неверный номер файла.");
+            // waitAnyKey();
+            continue; // Возвращаемся в начало цикла
+        }
+
+        break; // Ввод корректен, выходим из цикла while
     }
+    // --- КОНЕЦ ИЗМЕНЕНИЙ ---
 
     string fileName = files[choice - 1];
 
